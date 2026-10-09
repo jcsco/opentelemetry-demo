@@ -1,131 +1,96 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
-import { trace, context, propagation } from '@opentelemetry/api';
 import {
-  CompositePropagator,
-  W3CBaggagePropagator,
-  W3CTraceContextPropagator,
-} from "@opentelemetry/core";
-import {
-  BatchSpanProcessor,
-  TracerProvider,
-  StackContextManager
-} from "@opentelemetry/sdk-trace";
-import { XMLHttpRequestInstrumentation } from "@opentelemetry/instrumentation-xml-http-request";
-import { FetchInstrumentation } from "@opentelemetry/instrumentation-fetch";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import {
-  ATTR_DEVICE_ID,
-  ATTR_OS_NAME,
-  ATTR_OS_VERSION,
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from "@opentelemetry/semantic-conventions/incubating";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+  AnrModuleConfiguration,
+  ApplicationLifecycleModuleConfiguration,
+  CrashReportsModuleConfiguration,
+  HttpURLModuleConfiguration,
+  InteractionsModuleConfiguration,
+  NavigationModuleConfiguration,
+  NetworkInstrumentationModuleConfiguration,
+  NetworkMonitorModuleConfiguration,
+  OkHttp3AutoModuleConfiguration,
+  SessionReplayModuleConfiguration,
+  SlowRenderingModuleConfiguration,
+  SplunkRum,
+  StartupModuleConfiguration,
+} from "@splunk/otel-react-native";
+import type {
+  AgentConfiguration,
+  ModuleConfiguration,
+} from "@splunk/otel-react-native";
 import { useEffect, useState } from "react";
-import {
-  getSystemVersion,
-  getUniqueIdSync,
-  getVersion,
-} from "react-native-device-info";
+import { getSystemVersion, getUniqueIdSync } from "react-native-device-info";
 import { Platform } from "react-native";
-import { SessionIdProcessor } from "@/utils/SessionIdProcessor";
-import getFrontendProxyURL from "@/utils/Settings";
+import SessionGateway from "@/gateways/Session.gateway";
 
-// React Native 0.83's Performance API only supports the "mark" and "measure"
-// entry types; any other call to `performance.getEntriesByType()` emits a
-// "Deprecated API for given entry type" warning. `@opentelemetry/instrumentation-fetch`
-// falls back to `performance.getEntriesByType("resource")` for every request,
-// which makes the warning fire on every fetch even though the return value is
-// unused on mobile. Wrap the method so unsupported types return [] silently
-// while "mark"/"measure" continue to work.
-const originalGetEntriesByType = performance.getEntriesByType?.bind(performance);
-if (originalGetEntriesByType) {
-  performance.getEntriesByType = (entryType: string) => {
-    if (entryType !== "mark" && entryType !== "measure") {
-      return [];
-    }
-    return originalGetEntriesByType(entryType);
+const realm = process.env.EXPO_PUBLIC_SPLUNK_REALM;
+const rumAccessToken = process.env.EXPO_PUBLIC_SPLUNK_RUM_ACCESS_TOKEN;
+const userTrackingMode =
+  process.env.EXPO_PUBLIC_SPLUNK_USER_TRACKING_MODE === "ANONYMOUS_TRACKING"
+    ? "ANONYMOUS_TRACKING"
+    : "NO_TRACKING";
+
+const initSplunkRum = async () => {
+  const config: AgentConfiguration = {
+    appName: "react-native-app",
+    deploymentEnvironment:
+      process.env.EXPO_PUBLIC_SPLUNK_DEPLOYMENT_ENVIRONMENT || "local",
+    enableDebugLogging: __DEV__,
+    // Left undefined (buffering, no upload) until a realm/token is configured in .env.
+    endpoint: realm && rumAccessToken ? { realm, rumAccessToken } : undefined,
+    user: { trackingMode: userTrackingMode },
+    globalAttributes: {
+      "os.name": Platform.OS,
+      "os.version": getSystemVersion(),
+      "device.id": getUniqueIdSync(),
+    },
   };
-}
 
-export const setupTracerProvider = (proxyURL: string) => {
-  // TODO Should add a resource detector for React Native that provides this automatically
-  const resource = resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: "react-native-app",
-    [ATTR_OS_NAME]: Platform.OS,
-    [ATTR_OS_VERSION]: getSystemVersion(),
-    [ATTR_SERVICE_VERSION]: getVersion(),
-    [ATTR_DEVICE_ID]: getUniqueIdSync(),
-  });
+  const modules: ModuleConfiguration[] = [
+    new CrashReportsModuleConfiguration(true),
+    new ApplicationLifecycleModuleConfiguration(true),
+    new StartupModuleConfiguration(true),
+    new AnrModuleConfiguration(true),
+    new SlowRenderingModuleConfiguration(true),
+    new InteractionsModuleConfiguration(true),
+    new NetworkMonitorModuleConfiguration(true),
+    // Fetch/XMLHttpRequest instrumentation. This app only ever makes network
+    // calls through JS (see utils/Request.ts), never through native
+    // HttpURLConnection/OkHttp directly, so those native-layer HTTP modules are
+    // explicitly disabled below to avoid double-counting the same request as
+    // both a JS and a native span.
+    new NetworkInstrumentationModuleConfiguration(true),
+    new HttpURLModuleConfiguration(false),
+    new OkHttp3AutoModuleConfiguration(false),
+    // Screen names come from the expo-router integration wired up in app/_layout.tsx,
+    // so native automatic tracking is disabled here to avoid reporting host view
+    // controller/Activity names instead of JS routes.
+    new NavigationModuleConfiguration(true, false),
+    // Full session capture for Digital Experience Analytics in this sample app.
+    new SessionReplayModuleConfiguration(true, 1.0),
+  ];
 
-  return new TracerProvider({
-    resource,
-    spanProcessors: [
-      new BatchSpanProcessor({
-          exporter: new OTLPTraceExporter({
-            url: `${proxyURL}/otlp-http/v1/traces`,
-          }),
-          scheduledDelayMillis: 500,
-        },
-      ),
-      // TODO introduce a React Native session processor package that could be used here, taking into account mobile
-      // specific considerations for the session such as putting the app into the background
-      new SessionIdProcessor(),
-    ],
-  });
-}
+  await SplunkRum.install(config, modules);
 
-const Tracer = async () => {
-  const proxyURL = await getFrontendProxyURL();
-
-  context.setGlobalContextManager(new StackContextManager().enable());
-  propagation.setGlobalPropagator(new CompositePropagator({
-    propagators: [
-      new W3CBaggagePropagator(),
-      new W3CTraceContextPropagator(),
-    ],
-  }));
-  trace.setGlobalTracerProvider(setupTracerProvider(proxyURL));
-
-  registerInstrumentations({
-    instrumentations: [
-      // TODO Some tiptoeing required here, propagateTraceHeaderCorsUrls is required to make the instrumentation
-      // work in the context of a mobile app even though we are not making CORS requests. `clearTimingResources` must
-      // be turned off to avoid using the web-only Performance API
-      // Overall wrapping or forking this and providing a React Native specific auto instrumentation will ease
-      // integration and make it less error-prone
-      new FetchInstrumentation({
-        propagateTraceHeaderCorsUrls: /.*/,
-        clearTimingResources: false,
-      }),
-
-      // The React Native implementation of fetch is simply a polyfill on top of XMLHttpRequest:
-      // https://github.com/facebook/react-native/blob/7ccc5934d0f341f9bc8157f18913a7b340f5db2d/packages/react-native/Libraries/Network/fetch.js#L17
-      // Because of this when making requests using `fetch` there will an additional span created for the underlying
-      // request made with XMLHttpRequest. Since in this demo calls to /api/ are made using fetch, turn off
-      // instrumentation for that path to avoid the extra spans.
-      new XMLHttpRequestInstrumentation({
-        ignoreUrls: [/\/api\/.*/],
-      }),
-    ],
-  });
+  // Tag every span with the app's own session id (shared concept with the web
+  // frontend's session). Namespaced as `app.session.id` since `session.id` is
+  // reserved by Splunk RUM for its own session id.
+  const { userId } = await SessionGateway.getSession();
+  await SplunkRum.instance.globalAttributes.setString("app.session.id", userId);
 };
 
 export interface TracerResult {
   loaded: boolean;
 }
 
-// TODO providing a wrapper similar to this that uses hooks over the full JS OTEL API would be nice to have for both
-// React Native and React development
 export const useTracer = (): TracerResult => {
   const [loaded, setLoaded] = useState<boolean>(false);
 
   useEffect(() => {
     if (!loaded) {
-      Tracer()
-        .catch(() => console.warn("failed to setup tracer"))
+      initSplunkRum()
+        .catch(() => console.warn("failed to setup Splunk RUM"))
         .finally(() => setLoaded(true));
     }
   }, [loaded]);
