@@ -1,12 +1,13 @@
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The frontend's reverse-proxy port, as configured for the demo's
-/// `frontend-proxy` service (matches `EXPO_PUBLIC_FRONTEND_PROXY_PORT` in the
-/// react-native-app's `.env`).
-const _frontendProxyPort = 8080;
+/// `frontend-proxy` service (matches `FRONTEND_PROXY_PORT` in `.env`,
+/// mirroring the react-native-app's `EXPO_PUBLIC_FRONTEND_PROXY_PORT`).
+String get _frontendProxyPort => dotenv.get('FRONTEND_PROXY_PORT', fallback: '8080');
 
 const _frontendProxyUrlKey = 'frontend_proxy_url';
 
