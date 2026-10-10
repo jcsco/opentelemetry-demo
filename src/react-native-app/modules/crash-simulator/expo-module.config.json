@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["CrashSimulatorModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.crashsimulator.CrashSimulatorModule"]
+  }
+}
