@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:splunk_otel_flutter/splunk_otel_flutter.dart';
 
 import '../gateways/api_gateway.dart';
 import '../gateways/session_gateway.dart';
@@ -33,6 +34,15 @@ class CartProvider extends ChangeNotifier {
     await apiGateway.addCartItem(
       CartItem(productId: productId, quantity: quantity),
     );
+    await SplunkRum.instance.customTracking.trackCustomEvent(
+      name: 'cart_item_added',
+      attributes: MutableAttributes(
+        attributes: {
+          'product.id': MutableAttributeString(value: productId),
+          'product.quantity': MutableAttributeInt(value: quantity),
+        },
+      ),
+    );
     await loadCart();
   }
 
@@ -57,6 +67,15 @@ class CartProvider extends ChangeNotifier {
       ),
     );
     await loadCart();
+    await SplunkRum.instance.customTracking.trackCustomEvent(
+      name: 'order_placed',
+      attributes: MutableAttributes(
+        attributes: {
+          'order.id': MutableAttributeString(value: result.orderId),
+          'order.item_count': MutableAttributeInt(value: result.items.length),
+        },
+      ),
+    );
     return result;
   }
 

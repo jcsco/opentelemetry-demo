@@ -36,6 +36,13 @@
           "backgroundColor": "#ffffff"
         }
       ],
+      [
+        "expo-build-properties",
+        {
+          "android": { "minSdkVersion": 24 },
+          "ios": { "useFrameworks": "dynamic" }
+        }
+      ],
       "@splunk/otel-react-native",
       "./plugins/withAndroidCoreLibraryDesugaring"
     ],

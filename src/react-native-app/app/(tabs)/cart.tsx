@@ -16,6 +16,7 @@ import { IFormData } from "@/components/CheckoutForm/CheckoutForm";
 import Toast from "react-native-toast-message";
 import SessionGateway from "@/gateways/Session.gateway";
 import { useThemeColor } from "@/hooks/useThemeColor";
+import { SensitiveView } from "@splunk/otel-session-replay-react-native";
 
 export default function Cart() {
   const tint = useThemeColor({}, "tint");
@@ -111,7 +112,9 @@ export default function Cart() {
           <ThemedText style={styles.emptyCartText}>Empty Cart</ThemedText>
         </Pressable>
       </ThemedView>
-      <CheckoutForm onSubmit={onPlaceOrder} />
+      <SensitiveView style={styles.checkout}>
+        <CheckoutForm onSubmit={onPlaceOrder} />
+      </SensitiveView>
     </ThemedView>
   );
 }
@@ -122,6 +125,9 @@ const getStyles = (tint: string) =>
       flex: 1,
       gap: 20,
       justifyContent: "flex-start",
+    },
+    checkout: {
+      flex: 1,
     },
     emptyCartContainer: {
       display: "flex",

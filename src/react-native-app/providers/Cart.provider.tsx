@@ -5,6 +5,7 @@
  */
 import React, { createContext, useCallback, useContext, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SplunkRum } from "@splunk/otel-react-native";
 import ApiGateway from "@/gateways/Api.gateway";
 import { CartItem, OrderResult, PlaceOrderRequest } from "@/protos/demo";
 import { IProductCart } from "@/types/Cart";
@@ -60,8 +61,19 @@ const CartProvider = ({ children }: IProps) => {
   });
 
   const addItem = useCallback(
-    (item: CartItem) =>
-      addCartMutation.mutateAsync({ ...item, currencyCode: selectedCurrency }),
+    async (item: CartItem) => {
+      const result = await addCartMutation.mutateAsync({
+        ...item,
+        currencyCode: selectedCurrency,
+      });
+      SplunkRum.instance.customTracking
+        .trackCustomEvent("cart_item_added", {
+          "product.id": item.productId,
+          "product.quantity": item.quantity,
+        })
+        .catch(() => {});
+      return result;
+    },
     [addCartMutation, selectedCurrency],
   );
   const emptyCart = useCallback(
@@ -69,11 +81,19 @@ const CartProvider = ({ children }: IProps) => {
     [emptyCartMutation],
   );
   const placeOrder = useCallback(
-    (order: PlaceOrderRequest) =>
-      placeOrderMutation.mutateAsync({
+    async (order: PlaceOrderRequest) => {
+      const result = await placeOrderMutation.mutateAsync({
         ...order,
         currencyCode: selectedCurrency,
-      }),
+      });
+      SplunkRum.instance.customTracking
+        .trackCustomEvent("order_placed", {
+          "order.id": result.orderId,
+          "order.item_count": result.items.length,
+        })
+        .catch(() => {});
+      return result;
+    },
     [placeOrderMutation, selectedCurrency],
   );
 

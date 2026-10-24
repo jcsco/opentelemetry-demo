@@ -22,8 +22,10 @@ import type {
 import { useEffect, useState } from "react";
 import { getSystemVersion, getUniqueIdSync } from "react-native-device-info";
 import { Platform } from "react-native";
+import { SplunkSessionReplay } from "@splunk/otel-session-replay-react-native";
 import SessionGateway from "@/gateways/Session.gateway";
 
+const appName = process.env.EXPO_PUBLIC_SPLUNK_APP_NAME || "react-native-app";
 const realm = process.env.EXPO_PUBLIC_SPLUNK_REALM;
 const rumAccessToken = process.env.EXPO_PUBLIC_SPLUNK_RUM_ACCESS_TOKEN;
 const userTrackingMode =
@@ -33,7 +35,7 @@ const userTrackingMode =
 
 const initSplunkRum = async () => {
   const config: AgentConfiguration = {
-    appName: "react-native-app",
+    appName,
     deploymentEnvironment:
       process.env.EXPO_PUBLIC_SPLUNK_DEPLOYMENT_ENVIRONMENT || "local",
     enableDebugLogging: __DEV__,
@@ -72,6 +74,10 @@ const initSplunkRum = async () => {
   ];
 
   await SplunkRum.install(config, modules);
+
+  // The module configuration alone leaves replay in "notStarted"; recording
+  // only begins once start() is called.
+  await SplunkSessionReplay.instance.start();
 
   // Tag every span with the app's own session id (shared concept with the web
   // frontend's session). Namespaced as `app.session.id` since `session.id` is

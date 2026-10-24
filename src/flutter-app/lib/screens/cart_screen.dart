@@ -7,6 +7,7 @@ import '../providers/products_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/checkout_form.dart';
 import '../widgets/empty_cart.dart';
+import '../widgets/session_replay_mask.dart';
 
 /// Ported from the react-native-app's `app/(tabs)/cart.tsx`: the cart list
 /// and the checkout form live on the same screen, there is no separate
@@ -88,7 +89,7 @@ class _CartScreenState extends State<CartScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          CheckoutForm(onSubmit: _onPlaceOrder),
+          SessionReplayMask(child: CheckoutForm(onSubmit: _onPlaceOrder)),
         ],
       ),
     );

@@ -48,9 +48,29 @@ class RootTabs extends StatefulWidget {
 }
 
 class _RootTabsState extends State<RootTabs> {
+  static const _screenNames = ['Products', 'Cart', 'Settings'];
+
   int _index = 0;
 
-  void _goToProducts() => setState(() => _index = 0);
+  @override
+  void initState() {
+    super.initState();
+    _trackScreen(_index);
+  }
+
+  // Tabs live in an IndexedStack, not the Navigator, so SplunkNavigatorObserver
+  // never sees them; report each tab as a screen explicitly.
+  void _trackScreen(int index) {
+    SplunkRum.instance.navigation.track(screenName: _screenNames[index]);
+  }
+
+  void _selectTab(int index) {
+    if (index == _index) return;
+    setState(() => _index = index);
+    _trackScreen(index);
+  }
+
+  void _goToProducts() => _selectTab(0);
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +86,7 @@ class _RootTabsState extends State<RootTabs> {
       body: IndexedStack(index: _index, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: _selectTab,
         // react-native-app's tab bar is icon-only (tabBarShowLabel: false).
         labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         destinations: [

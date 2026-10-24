@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:splunk_otel_flutter/splunk_otel_flutter.dart';
+import 'package:splunk_otel_flutter_session_replay/splunk_otel_flutter_session_replay.dart';
 
 import 'gateways/session_gateway.dart';
 
@@ -10,8 +11,12 @@ import 'gateways/session_gateway.dart';
 /// react-native-app's `hooks/useTracer.ts`. An empty realm/token means the
 /// agent buffers locally without uploading until both are configured.
 Future<void> installTelemetry() async {
-  await dotenv.load();
+  await dotenv.load(
+    overrideWithFiles: ['local_env/.env.local'],
+    isOptional: true,
+  );
 
+  final appName = dotenv.get('SPLUNK_APP_NAME', fallback: 'flutter-app');
   final realm = dotenv.env['SPLUNK_REALM'] ?? '';
   final rumAccessToken = dotenv.env['SPLUNK_RUM_ACCESS_TOKEN'] ?? '';
   final userTrackingMode =
@@ -35,7 +40,7 @@ Future<void> installTelemetry() async {
               rumAccessToken: rumAccessToken,
             )
           : null,
-      appName: 'flutter-app',
+      appName: appName,
       deploymentEnvironment:
           dotenv.get('SPLUNK_DEPLOYMENT_ENVIRONMENT', fallback: 'local'),
       enableDebugLogging: false,
@@ -64,6 +69,10 @@ Future<void> installTelemetry() async {
         NetworkInstrumentationModuleConfiguration(isEnabled: false),
     ],
   );
+
+  // The module configuration alone leaves replay "notStarted"; recording only
+  // begins once start() is called.
+  await SplunkSessionReplay.instance.start();
 
   // Tag every span with the app's own session id (shared concept with the web
   // frontend's session). Namespaced as `app.session.id` since `session.id` is
